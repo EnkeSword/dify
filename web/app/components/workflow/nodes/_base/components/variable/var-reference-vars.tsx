@@ -1,6 +1,6 @@
 'use client'
 import type { FC } from 'react'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useHover } from 'ahooks'
 import { useTranslation } from 'react-i18next'
 import cn from '@/utils/classnames'
@@ -15,8 +15,14 @@ import {
 import Input from '@/app/components/base/input'
 import { BubbleX, Env } from '@/app/components/base/icons/src/vender/line/others'
 import { checkKeys } from '@/utils/var'
+import type { StructuredOutput } from '../../../llm/types'
+import { Type } from '../../../llm/types'
+import PickerStructurePanel from '@/app/components/workflow/nodes/_base/components/variable/object-child-tree-panel/picker'
+import { varTypeToStructType } from './utils'
+import type { Field } from '@/app/components/workflow/nodes/llm/types'
 import { FILE_STRUCT } from '@/app/components/workflow/constants'
 import { Loop } from '@/app/components/base/icons/src/vender/workflow'
+import { noop } from 'lodash-es'
 
 type ObjectChildrenProps = {
   nodeId: string
@@ -42,6 +48,8 @@ type ItemProps = {
   isLoopVar?: boolean
 }
 
+const objVarTypes = [VarType.object, VarType.file]
+
 const Item: FC<ItemProps> = ({
   nodeId,
   title,
@@ -49,25 +57,50 @@ const Item: FC<ItemProps> = ({
   itemData,
   onChange,
   onHovering,
-  itemWidth,
   isSupportFileVar,
   isException,
   isLoopVar,
 }) => {
-  const isFile = itemData.type === VarType.file
-  const isObj = ([VarType.object, VarType.file].includes(itemData.type) && itemData.children && itemData.children.length > 0)
+  const isStructureOutput = itemData.type === VarType.object && (itemData.children as StructuredOutput)?.schema?.properties
+  const isFile = itemData.type === VarType.file && !isStructureOutput
+  const isObj = ([VarType.object, VarType.file].includes(itemData.type) && itemData.children && (itemData.children as Var[]).length > 0)
   const isSys = itemData.variable.startsWith('sys.')
   const isEnv = itemData.variable.startsWith('env.')
   const isChatVar = itemData.variable.startsWith('conversation.')
-  const itemRef = useRef(null)
+
+  const objStructuredOutput: StructuredOutput | null = useMemo(() => {
+    if (!isObj) return null
+    const properties: Record<string, Field> = {};
+    (isFile ? FILE_STRUCT : (itemData.children as Var[])).forEach((c) => {
+      properties[c.variable] = {
+        type: varTypeToStructType(c.type),
+      }
+    })
+    return {
+      schema: {
+        type: Type.object,
+        properties,
+        required: [],
+        additionalProperties: false,
+      },
+    }
+  }, [isFile, isObj, itemData.children])
+
+  const structuredOutput = (() => {
+    if (isStructureOutput)
+      return itemData.children as StructuredOutput
+    return objStructuredOutput
+  })()
+
+  const itemRef = useRef<HTMLDivElement>(null)
   const [isItemHovering, setIsItemHovering] = useState(false)
-  const _ = useHover(itemRef, {
+  useHover(itemRef, {
     onChange: (hovering) => {
       if (hovering) {
         setIsItemHovering(true)
       }
       else {
-        if (isObj) {
+        if (isObj || isStructureOutput) {
           setTimeout(() => {
             setIsItemHovering(false)
           }, 100)
@@ -80,7 +113,7 @@ const Item: FC<ItemProps> = ({
   })
   const [isChildrenHovering, setIsChildrenHovering] = useState(false)
   const isHovering = isItemHovering || isChildrenHovering
-  const open = isObj && isHovering
+  const open = (isObj || isStructureOutput) && isHovering
   useEffect(() => {
     onHovering && onHovering(isHovering)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,15 +133,15 @@ const Item: FC<ItemProps> = ({
   return (
     <PortalToFollowElem
       open={open}
-      onOpenChange={() => { }}
+      onOpenChange={noop}
       placement='left-start'
     >
       <PortalToFollowElemTrigger className='w-full'>
         <div
           ref={itemRef}
           className={cn(
-            isObj ? ' pr-1' : 'pr-[18px]',
-            isHovering && (isObj ? 'bg-primary-50' : 'bg-state-base-hover'),
+            (isObj || isStructureOutput) ? ' pr-1' : 'pr-[18px]',
+            isHovering && ((isObj || isStructureOutput) ? 'bg-components-panel-on-panel-item-bg-hover' : 'bg-state-base-hover'),
             'relative flex h-6 w-full cursor-pointer items-center  rounded-md pl-3')
           }
           onClick={handleChosen}
@@ -130,42 +163,28 @@ const Item: FC<ItemProps> = ({
             )}
           </div>
           <div className='ml-1 shrink-0 text-xs font-normal capitalize text-text-tertiary'>{itemData.type}</div>
-          {isObj && (
-            <ChevronRight className={cn('ml-0.5 h-3 w-3 text-text-quaternary', isHovering && 'text-text-tertiary')} />
-          )}
-        </div>
-      </PortalToFollowElemTrigger>
+          {
+            (isObj || isStructureOutput) && (
+              <ChevronRight className={cn('ml-0.5 h-3 w-3 text-text-quaternary', isHovering && 'text-text-tertiary')} />
+            )
+          }
+        </div >
+      </PortalToFollowElemTrigger >
       <PortalToFollowElemContent style={{
         zIndex: 100,
       }}>
-        {(isObj && !isFile) && (
-          // eslint-disable-next-line ts/no-use-before-define
-          <ObjectChildren
-            nodeId={nodeId}
-            title={title}
-            objPath={[...objPath, itemData.variable]}
-            data={itemData.children as Var[]}
-            onChange={onChange}
+        {(isStructureOutput || isObj) && (
+          <PickerStructurePanel
+            root={{ nodeId, nodeName: title, attrName: itemData.variable }}
+            payload={structuredOutput!}
             onHovering={setIsChildrenHovering}
-            itemWidth={itemWidth}
-            isSupportFileVar={isSupportFileVar}
-          />
-        )}
-        {isFile && (
-          // eslint-disable-next-line ts/no-use-before-define
-          <ObjectChildren
-            nodeId={nodeId}
-            title={title}
-            objPath={[...objPath, itemData.variable]}
-            data={FILE_STRUCT}
-            onChange={onChange}
-            onHovering={setIsChildrenHovering}
-            itemWidth={itemWidth}
-            isSupportFileVar={isSupportFileVar}
+            onSelect={(valueSelector) => {
+              onChange(valueSelector, itemData)
+            }}
           />
         )}
       </PortalToFollowElemContent>
-    </PortalToFollowElem>
+    </PortalToFollowElem >
   )
 }
 
@@ -180,9 +199,9 @@ const ObjectChildren: FC<ObjectChildrenProps> = ({
   isSupportFileVar,
 }) => {
   const currObjPath = objPath
-  const itemRef = useRef(null)
+  const itemRef = useRef<HTMLDivElement>(null)
   const [isItemHovering, setIsItemHovering] = useState(false)
-  const _ = useHover(itemRef, {
+  useHover(itemRef, {
     onChange: (hovering) => {
       if (hovering) {
         setIsItemHovering(true)
@@ -239,6 +258,9 @@ type Props = {
   onChange: (value: ValueSelector, item: Var) => void
   itemWidth?: number
   maxHeightClass?: string
+  onClose?: () => void
+  onBlur?: () => void
+  autoFocus?: boolean
 }
 const VarReferenceVars: FC<Props> = ({
   hideSearch,
@@ -248,9 +270,19 @@ const VarReferenceVars: FC<Props> = ({
   onChange,
   itemWidth,
   maxHeightClass,
+  onClose,
+  onBlur,
+  autoFocus = true,
 }) => {
   const { t } = useTranslation()
   const [searchText, setSearchText] = useState('')
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose?.()
+    }
+  }
 
   const filteredVars = vars.filter((v) => {
     const children = v.vars.filter(v => checkKeys([v.variable], false).isValid || v.variable.startsWith('sys.') || v.variable.startsWith('env.') || v.variable.startsWith('conversation.'))
@@ -282,15 +314,18 @@ const VarReferenceVars: FC<Props> = ({
       {
         !hideSearch && (
           <>
-            <div className={cn('mx-2 mb-1 mt-2', searchBoxClassName)} onClick={e => e.stopPropagation()}>
+            <div className={cn('var-search-input-wrapper mx-2 mb-1 mt-2', searchBoxClassName)} onClick={e => e.stopPropagation()}>
               <Input
+                className='var-search-input'
                 showLeftIcon
                 showClearIcon
                 value={searchText}
                 placeholder={t('workflow.common.searchVar') || ''}
                 onChange={e => setSearchText(e.target.value)}
+                onKeyDown={handleKeyDown}
                 onClear={() => setSearchText('')}
-                autoFocus
+                onBlur={onBlur}
+                autoFocus={autoFocus}
               />
             </div>
             <div className='relative left-[-4px] h-[0.5px] bg-black/5' style={{
@@ -328,7 +363,7 @@ const VarReferenceVars: FC<Props> = ({
           }
         </div>
         : <div className='pl-3 text-xs font-medium uppercase leading-[18px] text-gray-500'>{t('workflow.common.noVar')}</div>}
-    </ >
+    </>
   )
 }
 export default React.memo(VarReferenceVars)

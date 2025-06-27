@@ -1,11 +1,11 @@
 import json
 
 from flask import request
-from flask_restful import marshal, reqparse  # type: ignore
-from sqlalchemy import desc
+from flask_restful import marshal, reqparse
+from sqlalchemy import desc, select
 from werkzeug.exceptions import NotFound
 
-import services.dataset_service
+import services
 from controllers.common.errors import FilenameNotExistsError
 from controllers.service_api import api
 from controllers.service_api.app.error import (
@@ -19,13 +19,17 @@ from controllers.service_api.dataset.error import (
     ArchivedDocumentImmutableError,
     DocumentIndexingError,
 )
-from controllers.service_api.wraps import DatasetApiResource, cloud_edition_billing_resource_check
+from controllers.service_api.wraps import (
+    DatasetApiResource,
+    cloud_edition_billing_rate_limit_check,
+    cloud_edition_billing_resource_check,
+)
 from core.errors.error import ProviderTokenNotInitError
 from extensions.ext_database import db
 from fields.document_fields import document_fields, document_status_fields
 from libs.login import current_user
 from models.dataset import Dataset, Document, DocumentSegment
-from services.dataset_service import DocumentService
+from services.dataset_service import DatasetService, DocumentService
 from services.entities.knowledge_entities.knowledge_entities import KnowledgeConfig
 from services.file_service import FileService
 
@@ -35,6 +39,7 @@ class DocumentAddByTextApi(DatasetApiResource):
 
     @cloud_edition_billing_resource_check("vector_space", "dataset")
     @cloud_edition_billing_resource_check("documents", "dataset")
+    @cloud_edition_billing_rate_limit_check("knowledge", "dataset")
     def post(self, tenant_id, dataset_id):
         """Create document by text."""
         parser = reqparse.RequestParser()
@@ -49,15 +54,18 @@ class DocumentAddByTextApi(DatasetApiResource):
         parser.add_argument(
             "indexing_technique", type=str, choices=Dataset.INDEXING_TECHNIQUE_LIST, nullable=False, location="json"
         )
-        parser.add_argument("retrieval_model", type=dict, required=False, nullable=False, location="json")
+        parser.add_argument("retrieval_model", type=dict, required=False, nullable=True, location="json")
+        parser.add_argument("embedding_model", type=str, required=False, nullable=True, location="json")
+        parser.add_argument("embedding_model_provider", type=str, required=False, nullable=True, location="json")
 
         args = parser.parse_args()
+
         dataset_id = str(dataset_id)
         tenant_id = str(tenant_id)
         dataset = db.session.query(Dataset).filter(Dataset.tenant_id == tenant_id, Dataset.id == dataset_id).first()
 
         if not dataset:
-            raise ValueError("Dataset is not exist.")
+            raise ValueError("Dataset does not exist.")
 
         if not dataset.indexing_technique and not args["indexing_technique"]:
             raise ValueError("indexing_technique is required.")
@@ -66,6 +74,21 @@ class DocumentAddByTextApi(DatasetApiResource):
         name = args.get("name")
         if text is None or name is None:
             raise ValueError("Both 'text' and 'name' must be non-null values.")
+
+        if args.get("embedding_model_provider"):
+            DatasetService.check_embedding_model_setting(
+                tenant_id, args.get("embedding_model_provider"), args.get("embedding_model")
+            )
+        if (
+            args.get("retrieval_model")
+            and args.get("retrieval_model").get("reranking_model")
+            and args.get("retrieval_model").get("reranking_model").get("reranking_provider_name")
+        ):
+            DatasetService.check_reranking_model_setting(
+                tenant_id,
+                args.get("retrieval_model").get("reranking_model").get("reranking_provider_name"),
+                args.get("retrieval_model").get("reranking_model").get("reranking_model_name"),
+            )
 
         upload_file = FileService.upload_text(text=str(text), text_name=str(name))
         data_source = {
@@ -97,6 +120,7 @@ class DocumentUpdateByTextApi(DatasetApiResource):
     """Resource for update documents."""
 
     @cloud_edition_billing_resource_check("vector_space", "dataset")
+    @cloud_edition_billing_rate_limit_check("knowledge", "dataset")
     def post(self, tenant_id, dataset_id, document_id):
         """Update document by text."""
         parser = reqparse.RequestParser()
@@ -114,7 +138,18 @@ class DocumentUpdateByTextApi(DatasetApiResource):
         dataset = db.session.query(Dataset).filter(Dataset.tenant_id == tenant_id, Dataset.id == dataset_id).first()
 
         if not dataset:
-            raise ValueError("Dataset is not exist.")
+            raise ValueError("Dataset does not exist.")
+
+        if (
+            args.get("retrieval_model")
+            and args.get("retrieval_model").get("reranking_model")
+            and args.get("retrieval_model").get("reranking_model").get("reranking_provider_name")
+        ):
+            DatasetService.check_reranking_model_setting(
+                tenant_id,
+                args.get("retrieval_model").get("reranking_model").get("reranking_provider_name"),
+                args.get("retrieval_model").get("reranking_model").get("reranking_model_name"),
+            )
 
         # indexing_technique is already set in dataset since this is an update
         args["indexing_technique"] = dataset.indexing_technique
@@ -156,6 +191,7 @@ class DocumentAddByFileApi(DatasetApiResource):
 
     @cloud_edition_billing_resource_check("vector_space", "dataset")
     @cloud_edition_billing_resource_check("documents", "dataset")
+    @cloud_edition_billing_rate_limit_check("knowledge", "dataset")
     def post(self, tenant_id, dataset_id):
         """Create document by upload file."""
         args = {}
@@ -172,9 +208,27 @@ class DocumentAddByFileApi(DatasetApiResource):
         dataset = db.session.query(Dataset).filter(Dataset.tenant_id == tenant_id, Dataset.id == dataset_id).first()
 
         if not dataset:
-            raise ValueError("Dataset is not exist.")
-        if not dataset.indexing_technique and not args.get("indexing_technique"):
+            raise ValueError("Dataset does not exist.")
+
+        indexing_technique = args.get("indexing_technique") or dataset.indexing_technique
+        if not indexing_technique:
             raise ValueError("indexing_technique is required.")
+        args["indexing_technique"] = indexing_technique
+
+        if "embedding_model_provider" in args:
+            DatasetService.check_embedding_model_setting(
+                tenant_id, args["embedding_model_provider"], args["embedding_model"]
+            )
+        if (
+            "retrieval_model" in args
+            and args["retrieval_model"].get("reranking_model")
+            and args["retrieval_model"].get("reranking_model").get("reranking_provider_name")
+        ):
+            DatasetService.check_reranking_model_setting(
+                tenant_id,
+                args["retrieval_model"].get("reranking_model").get("reranking_provider_name"),
+                args["retrieval_model"].get("reranking_model").get("reranking_model_name"),
+            )
 
         # save file info
         file = request.files["file"]
@@ -204,12 +258,16 @@ class DocumentAddByFileApi(DatasetApiResource):
         knowledge_config = KnowledgeConfig(**args)
         DocumentService.document_create_args_validate(knowledge_config)
 
+        dataset_process_rule = dataset.latest_process_rule if "process_rule" not in args else None
+        if not knowledge_config.original_document_id and not dataset_process_rule and not knowledge_config.process_rule:
+            raise ValueError("process_rule is required.")
+
         try:
             documents, batch = DocumentService.save_document_with_dataset_id(
                 dataset=dataset,
                 knowledge_config=knowledge_config,
                 account=dataset.created_by_account,
-                dataset_process_rule=dataset.latest_process_rule if "process_rule" not in args else None,
+                dataset_process_rule=dataset_process_rule,
                 created_from="api",
             )
         except ProviderTokenNotInitError as ex:
@@ -223,6 +281,7 @@ class DocumentUpdateByFileApi(DatasetApiResource):
     """Resource for update documents."""
 
     @cloud_edition_billing_resource_check("vector_space", "dataset")
+    @cloud_edition_billing_rate_limit_check("knowledge", "dataset")
     def post(self, tenant_id, dataset_id, document_id):
         """Update document by upload file."""
         args = {}
@@ -239,7 +298,7 @@ class DocumentUpdateByFileApi(DatasetApiResource):
         dataset = db.session.query(Dataset).filter(Dataset.tenant_id == tenant_id, Dataset.id == dataset_id).first()
 
         if not dataset:
-            raise ValueError("Dataset is not exist.")
+            raise ValueError("Dataset does not exist.")
 
         # indexing_technique is already set in dataset since this is an update
         args["indexing_technique"] = dataset.indexing_technique
@@ -293,6 +352,7 @@ class DocumentUpdateByFileApi(DatasetApiResource):
 
 
 class DocumentDeleteApi(DatasetApiResource):
+    @cloud_edition_billing_rate_limit_check("knowledge", "dataset")
     def delete(self, tenant_id, dataset_id, document_id):
         """Delete document."""
         document_id = str(document_id)
@@ -303,7 +363,7 @@ class DocumentDeleteApi(DatasetApiResource):
         dataset = db.session.query(Dataset).filter(Dataset.tenant_id == tenant_id, Dataset.id == dataset_id).first()
 
         if not dataset:
-            raise ValueError("Dataset is not exist.")
+            raise ValueError("Dataset does not exist.")
 
         document = DocumentService.get_document(dataset.id, document_id)
 
@@ -321,7 +381,7 @@ class DocumentDeleteApi(DatasetApiResource):
         except services.errors.document.DocumentIndexingError:
             raise DocumentIndexingError("Cannot delete document during indexing.")
 
-        return {"result": "success"}, 200
+        return 204
 
 
 class DocumentListApi(DatasetApiResource):
@@ -335,7 +395,7 @@ class DocumentListApi(DatasetApiResource):
         if not dataset:
             raise NotFound("Dataset not found.")
 
-        query = Document.query.filter_by(dataset_id=str(dataset_id), tenant_id=tenant_id)
+        query = select(Document).filter_by(dataset_id=str(dataset_id), tenant_id=tenant_id)
 
         if search:
             search = f"%{search}%"
@@ -343,7 +403,7 @@ class DocumentListApi(DatasetApiResource):
 
         query = query.order_by(desc(Document.created_at), desc(Document.position))
 
-        paginated_documents = query.paginate(page=page, per_page=limit, max_per_page=100, error_out=False)
+        paginated_documents = db.paginate(select=query, page=page, per_page=limit, max_per_page=100, error_out=False)
         documents = paginated_documents.items
 
         response = {
@@ -372,19 +432,36 @@ class DocumentIndexingStatusApi(DatasetApiResource):
             raise NotFound("Documents not found.")
         documents_status = []
         for document in documents:
-            completed_segments = DocumentSegment.query.filter(
-                DocumentSegment.completed_at.isnot(None),
-                DocumentSegment.document_id == str(document.id),
-                DocumentSegment.status != "re_segment",
-            ).count()
-            total_segments = DocumentSegment.query.filter(
-                DocumentSegment.document_id == str(document.id), DocumentSegment.status != "re_segment"
-            ).count()
-            document.completed_segments = completed_segments
-            document.total_segments = total_segments
-            if document.is_paused:
-                document.indexing_status = "paused"
-            documents_status.append(marshal(document, document_status_fields))
+            completed_segments = (
+                db.session.query(DocumentSegment)
+                .filter(
+                    DocumentSegment.completed_at.isnot(None),
+                    DocumentSegment.document_id == str(document.id),
+                    DocumentSegment.status != "re_segment",
+                )
+                .count()
+            )
+            total_segments = (
+                db.session.query(DocumentSegment)
+                .filter(DocumentSegment.document_id == str(document.id), DocumentSegment.status != "re_segment")
+                .count()
+            )
+            # Create a dictionary with document attributes and additional fields
+            document_dict = {
+                "id": document.id,
+                "indexing_status": "paused" if document.is_paused else document.indexing_status,
+                "processing_started_at": document.processing_started_at,
+                "parsing_completed_at": document.parsing_completed_at,
+                "cleaning_completed_at": document.cleaning_completed_at,
+                "splitting_completed_at": document.splitting_completed_at,
+                "completed_at": document.completed_at,
+                "paused_at": document.paused_at,
+                "error": document.error,
+                "stopped_at": document.stopped_at,
+                "completed_segments": completed_segments,
+                "total_segments": total_segments,
+            }
+            documents_status.append(marshal(document_dict, document_status_fields))
         data = {"data": documents_status}
         return data
 

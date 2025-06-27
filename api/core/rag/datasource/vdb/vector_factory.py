@@ -74,6 +74,10 @@ class Vector:
                 from core.rag.datasource.vdb.pgvector.pgvector import PGVectorFactory
 
                 return PGVectorFactory
+            case VectorType.VASTBASE:
+                from core.rag.datasource.vdb.pyvastbase.vastbase_vector import VastbaseVectorFactory
+
+                return VastbaseVectorFactory
             case VectorType.PGVECTO_RS:
                 from core.rag.datasource.vdb.pgvecto_rs.pgvecto_rs import PGVectoRSFactory
 
@@ -156,6 +160,14 @@ class Vector:
                 from core.rag.datasource.vdb.tablestore.tablestore_vector import TableStoreVectorFactory
 
                 return TableStoreVectorFactory
+            case VectorType.HUAWEI_CLOUD:
+                from core.rag.datasource.vdb.huawei.huawei_cloud_vector import HuaweiCloudVectorFactory
+
+                return HuaweiCloudVectorFactory
+            case VectorType.MATRIXONE:
+                from core.rag.datasource.vdb.matrixone.matrixone_vector import MatrixoneVectorFactory
+
+                return MatrixoneVectorFactory
             case _:
                 raise ValueError(f"Vector store {vector_type} is not supported.")
 

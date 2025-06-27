@@ -19,12 +19,14 @@ export enum FormTypeEnum {
   toolSelector = 'tool-selector',
   multiToolSelector = 'array[tools]',
   appSelector = 'app-selector',
+  dynamicSelect = 'dynamic-select',
 }
 
 export type FormOption = {
   label: TypeWithI18N
   value: string
   show_on: FormShowOnObject[]
+  icon?: string
 }
 
 export enum ModelTypeEnum {
@@ -60,6 +62,7 @@ export enum ModelFeatureEnum {
   video = 'video',
   document = 'document',
   audio = 'audio',
+  StructuredOutput = 'structured-output',
 }
 
 export enum ModelFeatureTextEnum {

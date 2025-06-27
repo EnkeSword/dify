@@ -3,11 +3,10 @@ import { useAppContext } from '@/context/app-context'
 import Toast from '../../base/toast'
 import { useTranslation } from 'react-i18next'
 import { useInvalidatePermissions, useMutationPermissions, usePermissions } from '@/service/use-plugins'
+import { useMemo } from 'react'
+import { useGlobalPublicStore } from '@/context/global-public-context'
 
 const hasPermission = (permission: PermissionType | undefined, isAdmin: boolean) => {
-  if (isAdmin)
-    return true // Administrators always have permissions
-
   if (!permission)
     return false
 
@@ -17,7 +16,7 @@ const hasPermission = (permission: PermissionType | undefined, isAdmin: boolean)
   if (permission === PermissionType.everyone)
     return true
 
-  return false
+  return isAdmin
 }
 
 const usePermission = () => {
@@ -43,6 +42,19 @@ const usePermission = () => {
     permissions,
     setPermissions: updatePermission,
     isUpdatePending,
+  }
+}
+
+export const useCanInstallPluginFromMarketplace = () => {
+  const { enable_marketplace } = useGlobalPublicStore(s => s.systemFeatures)
+  const { canManagement } = usePermission()
+
+  const canInstallPluginFromMarketplace = useMemo(() => {
+    return enable_marketplace && canManagement
+  }, [enable_marketplace, canManagement])
+
+  return {
+    canInstallPluginFromMarketplace,
   }
 }
 

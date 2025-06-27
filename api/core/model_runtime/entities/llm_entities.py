@@ -1,8 +1,9 @@
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from enum import StrEnum
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.model_runtime.entities.message_entities import AssistantPromptMessage, PromptMessage
 from core.model_runtime.entities.model_entities import ModelUsage, PriceInfo
@@ -15,19 +16,6 @@ class LLMMode(StrEnum):
 
     COMPLETION = "completion"
     CHAT = "chat"
-
-    @classmethod
-    def value_of(cls, value: str) -> "LLMMode":
-        """
-        Get value of given mode.
-
-        :param value: mode value
-        :return: mode
-        """
-        for mode in cls:
-            if mode.value == value:
-                return mode
-        raise ValueError(f"invalid mode value {value}")
 
 
 class LLMUsage(ModelUsage):
@@ -107,10 +95,24 @@ class LLMResult(BaseModel):
 
     id: Optional[str] = None
     model: str
-    prompt_messages: list[PromptMessage]
+    prompt_messages: Sequence[PromptMessage] = Field(default_factory=list)
     message: AssistantPromptMessage
     usage: LLMUsage
     system_fingerprint: Optional[str] = None
+
+
+class LLMStructuredOutput(BaseModel):
+    """
+    Model class for llm structured output.
+    """
+
+    structured_output: Optional[Mapping[str, Any]] = None
+
+
+class LLMResultWithStructuredOutput(LLMResult, LLMStructuredOutput):
+    """
+    Model class for llm result with structured output.
+    """
 
 
 class LLMResultChunkDelta(BaseModel):
@@ -130,9 +132,15 @@ class LLMResultChunk(BaseModel):
     """
 
     model: str
-    prompt_messages: list[PromptMessage]
+    prompt_messages: Sequence[PromptMessage] = Field(default_factory=list)
     system_fingerprint: Optional[str] = None
     delta: LLMResultChunkDelta
+
+
+class LLMResultChunkWithStructuredOutput(LLMResultChunk, LLMStructuredOutput):
+    """
+    Model class for llm result chunk with structured output.
+    """
 
 
 class NumTokensResult(PriceInfo):

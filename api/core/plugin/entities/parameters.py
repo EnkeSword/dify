@@ -10,6 +10,9 @@ from core.tools.entities.common_entities import I18nObject
 class PluginParameterOption(BaseModel):
     value: str = Field(..., description="The value of the option")
     label: I18nObject = Field(..., description="The label of the option")
+    icon: Optional[str] = Field(
+        default=None, description="The icon of the option, can be a url or a base64 encoded image"
+    )
 
     @field_validator("value", mode="before")
     @classmethod
@@ -35,6 +38,7 @@ class PluginParameterType(enum.StrEnum):
     APP_SELECTOR = CommonParameterType.APP_SELECTOR.value
     MODEL_SELECTOR = CommonParameterType.MODEL_SELECTOR.value
     TOOLS_SELECTOR = CommonParameterType.TOOLS_SELECTOR.value
+    DYNAMIC_SELECT = CommonParameterType.DYNAMIC_SELECT.value
 
     # deprecated, should not use.
     SYSTEM_FILES = CommonParameterType.SYSTEM_FILES.value
@@ -131,7 +135,7 @@ def cast_parameter_value(typ: enum.StrEnum, value: Any, /):
                     raise ValueError("The selector must be a dictionary.")
                 return value
             case PluginParameterType.TOOLS_SELECTOR:
-                if not isinstance(value, list):
+                if value and not isinstance(value, list):
                     raise ValueError("The tools selector must be a list.")
                 return value
             case _:
@@ -147,7 +151,7 @@ def init_frontend_parameter(rule: PluginParameter, type: enum.StrEnum, value: An
     init frontend parameter by rule
     """
     parameter_value = value
-    if not parameter_value and parameter_value != 0 and type != PluginParameterType.TOOLS_SELECTOR:
+    if not parameter_value and parameter_value != 0:
         # get default value
         parameter_value = rule.default
         if not parameter_value and rule.required:

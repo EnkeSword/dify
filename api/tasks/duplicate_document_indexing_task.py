@@ -27,7 +27,9 @@ def duplicate_document_indexing_task(dataset_id: str, document_ids: list):
 
     dataset = db.session.query(Dataset).filter(Dataset.id == dataset_id).first()
     if dataset is None:
-        raise ValueError("Dataset not found")
+        logging.info(click.style("Dataset not found: {}".format(dataset_id), fg="red"))
+        db.session.close()
+        return
 
     # check document limit
     features = FeatureService.get_features(dataset.tenant_id)
@@ -57,6 +59,8 @@ def duplicate_document_indexing_task(dataset_id: str, document_ids: list):
                 db.session.add(document)
         db.session.commit()
         return
+    finally:
+        db.session.close()
 
     for document_id in document_ids:
         logging.info(click.style("Start process document: {}".format(document_id), fg="green"))
@@ -95,4 +99,6 @@ def duplicate_document_indexing_task(dataset_id: str, document_ids: list):
     except DocumentIsPausedError as ex:
         logging.info(click.style(str(ex), fg="yellow"))
     except Exception:
-        pass
+        logging.exception("duplicate_document_indexing_task failed, dataset_id: {}".format(dataset_id))
+    finally:
+        db.session.close()

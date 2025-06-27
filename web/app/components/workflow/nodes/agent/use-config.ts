@@ -1,7 +1,6 @@
 import { useStrategyProviderDetail } from '@/service/use-strategy'
 import useNodeCrud from '../_base/hooks/use-node-crud'
 import useVarList from '../_base/hooks/use-var-list'
-import useOneStepRun from '../_base/hooks/use-one-step-run'
 import type { AgentNodeType } from './types'
 import {
   useIsChatMode,
@@ -85,12 +84,13 @@ const useConfig = (id: string, payload: AgentNodeType) => {
     enabled: Boolean(pluginId),
   })
   const formData = useMemo(() => {
+    const paramNameList = (currentStrategy?.parameters || []).map(item => item.name)
     return Object.fromEntries(
-      Object.entries(inputs.agent_parameters || {}).map(([key, value]) => {
+      Object.entries(inputs.agent_parameters || {}).filter(([name]) => paramNameList.includes(name)).map(([key, value]) => {
         return [key, value.value]
       }),
     )
-  }, [inputs.agent_parameters])
+  }, [inputs.agent_parameters, currentStrategy?.parameters])
   const onFormChange = (value: Record<string, any>) => {
     const res: ToolVarInputs = {}
     Object.entries(value).forEach(([key, val]) => {
@@ -130,35 +130,6 @@ const useConfig = (id: string, payload: AgentNodeType) => {
   })
 
   // single run
-  const {
-    isShowSingleRun,
-    showSingleRun,
-    hideSingleRun,
-    toVarInputs,
-    runningStatus,
-    handleRun,
-    handleStop,
-    runInputData,
-    setRunInputData,
-    runResult,
-    getInputVars,
-  } = useOneStepRun<AgentNodeType>({
-    id,
-    data: inputs,
-    defaultRunInputData: {},
-  })
-  const allVarStrArr = (() => {
-    const arr = currentStrategy?.parameters.filter(item => item.type === 'string').map((item) => {
-      return formData[item.name]
-    }) || []
-
-    return arr
-  })()
-  const varInputs = (() => {
-    const vars = getInputVars(allVarStrArr)
-
-    return vars
-  })()
 
   const outputSchema = useMemo(() => {
     const res: any[] = []
@@ -198,18 +169,6 @@ const useConfig = (id: string, payload: AgentNodeType) => {
     pluginDetail: pluginDetail.data?.plugins.at(0),
     availableVars,
     availableNodesWithParent,
-
-    isShowSingleRun,
-    showSingleRun,
-    hideSingleRun,
-    toVarInputs,
-    runningStatus,
-    handleRun,
-    handleStop,
-    runInputData,
-    setRunInputData,
-    runResult,
-    varInputs,
     outputSchema,
     handleMemoryChange,
     isChatMode,

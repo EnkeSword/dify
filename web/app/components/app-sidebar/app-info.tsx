@@ -6,9 +6,11 @@ import {
   RiDeleteBinLine,
   RiEditLine,
   RiEqualizer2Line,
+  RiExchange2Line,
   RiFileCopy2Line,
   RiFileDownloadLine,
   RiFileUploadLine,
+  RiMoreLine,
 } from '@remixicon/react'
 import AppIcon from '../base/app-icon'
 import SwitchAppModal from '../app/switch-app-modal'
@@ -32,19 +34,24 @@ import { fetchWorkflowDraft } from '@/service/workflow'
 import ContentDialog from '@/app/components/base/content-dialog'
 import Button from '@/app/components/base/button'
 import CardView from '@/app/(commonLayout)/app/(appDetailLayout)/[appId]/overview/cardView'
+import Divider from '../base/divider'
+import { PortalToFollowElem, PortalToFollowElemContent, PortalToFollowElemTrigger } from '../base/portal-to-follow-elem'
 
 export type IAppInfoProps = {
   expand: boolean
+  onlyShowDetail?: boolean
+  openState?: boolean
+  onDetailExpand?: (expand: boolean) => void
 }
 
-const AppInfo = ({ expand }: IAppInfoProps) => {
+const AppInfo = ({ expand, onlyShowDetail = false, openState = false, onDetailExpand }: IAppInfoProps) => {
   const { t } = useTranslation()
   const { notify } = useContext(ToastContext)
   const { replace } = useRouter()
   const { onPlanInfoChanged } = useProviderContext()
   const appDetail = useAppStore(state => state.appDetail)
   const setAppDetail = useAppStore(state => state.setAppDetail)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(openState)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
@@ -85,7 +92,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
       setAppDetail(app)
       mutateApps()
     }
-    catch (e) {
+    catch {
       notify({ type: 'error', message: t('app.editFailed') })
     }
   }, [appDetail, mutateApps, notify, setAppDetail, t])
@@ -112,7 +119,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
       onPlanInfoChanged()
       getRedirection(true, newApp, replace)
     }
-    catch (e) {
+    catch {
       notify({ type: 'error', message: t('app.newApp.appCreateFailed') })
     }
   }
@@ -131,7 +138,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
       a.download = `${appDetail.name}.yml`
       a.click()
     }
-    catch (e) {
+    catch {
       notify({ type: 'error', message: t('app.exportFailed') })
     }
   }
@@ -152,7 +159,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
       }
       setSecretEnvList(list)
     }
-    catch (e) {
+    catch {
       notify({ type: 'error', message: t('app.exportFailed') })
     }
   }
@@ -175,52 +182,62 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
       })
     }
     setShowConfirmDelete(false)
-  }, [appDetail, mutateApps, notify, onPlanInfoChanged, replace, t])
+  }, [appDetail, mutateApps, notify, onPlanInfoChanged, replace, setAppDetail, t])
 
   const { isCurrentWorkspaceEditor } = useAppContext()
+
+  const [showMore, setShowMore] = useState(false)
+  const handleTriggerMore = useCallback(() => {
+    setShowMore(true)
+  }, [setShowMore])
 
   if (!appDetail)
     return null
 
   return (
     <div>
-      <button
-        onClick={() => {
-          if (isCurrentWorkspaceEditor)
-            setOpen(v => !v)
-        }}
-        className='block w-full'
-      >
-        <div className={cn('flex rounded-lg', expand ? 'flex-col gap-2 p-2 pb-2.5' : 'items-start justify-center gap-1 p-1', open && 'bg-state-base-hover', isCurrentWorkspaceEditor && 'cursor-pointer hover:bg-state-base-hover')}>
-          <div className={`flex items-center self-stretch ${expand ? 'justify-between' : 'flex-col gap-1'}`}>
-            <AppIcon
-              size={expand ? 'large' : 'small'}
-              iconType={appDetail.icon_type}
-              icon={appDetail.icon}
-              background={appDetail.icon_background}
-              imageUrl={appDetail.icon_url}
-            />
-            <div className='flex items-center justify-center rounded-md p-0.5'>
-              <div className='flex h-5 w-5 items-center justify-center'>
-                <RiEqualizer2Line className='h-4 w-4 text-text-tertiary' />
+      {!onlyShowDetail && (
+        <button
+          onClick={() => {
+            if (isCurrentWorkspaceEditor)
+              setOpen(v => !v)
+          }}
+          className='block w-full'
+        >
+          <div className={cn('flex rounded-lg', expand ? 'flex-col gap-2 p-2 pb-2.5' : 'items-start justify-center gap-1 p-1', open && 'bg-state-base-hover', isCurrentWorkspaceEditor && 'cursor-pointer hover:bg-state-base-hover')}>
+            <div className={`flex items-center self-stretch ${expand ? 'justify-between' : 'flex-col gap-1'}`}>
+              <AppIcon
+                size={expand ? 'large' : 'small'}
+                iconType={appDetail.icon_type}
+                icon={appDetail.icon}
+                background={appDetail.icon_background}
+                imageUrl={appDetail.icon_url}
+              />
+              <div className='flex items-center justify-center rounded-md p-0.5'>
+                <div className='flex h-5 w-5 items-center justify-center'>
+                  <RiEqualizer2Line className='h-4 w-4 text-text-tertiary' />
+                </div>
               </div>
             </div>
-          </div>
-          {
-            expand && (
-              <div className='flex flex-col items-start gap-1'>
-                <div className='flex w-full'>
-                  <div className='system-md-semibold truncate text-text-secondary'>{appDetail.name}</div>
+            {
+              expand && (
+                <div className='flex flex-col items-start gap-1'>
+                  <div className='flex w-full'>
+                    <div className='system-md-semibold truncate text-text-secondary'>{appDetail.name}</div>
+                  </div>
+                  <div className='system-2xs-medium-uppercase text-text-tertiary'>{appDetail.mode === 'advanced-chat' ? t('app.types.advanced') : appDetail.mode === 'agent-chat' ? t('app.types.agent') : appDetail.mode === 'chat' ? t('app.types.chatbot') : appDetail.mode === 'completion' ? t('app.types.completion') : t('app.types.workflow')}</div>
                 </div>
-                <div className='system-2xs-medium-uppercase text-text-tertiary'>{appDetail.mode === 'advanced-chat' ? t('app.types.advanced') : appDetail.mode === 'agent-chat' ? t('app.types.agent') : appDetail.mode === 'chat' ? t('app.types.chatbot') : appDetail.mode === 'completion' ? t('app.types.completion') : t('app.types.workflow')}</div>
-              </div>
-            )
-          }
-        </div>
-      </button>
+              )
+            }
+          </div>
+        </button>
+      )}
       <ContentDialog
-        show={open}
-        onClose={() => setOpen(false)}
+        show={onlyShowDetail ? openState : open}
+        onClose={() => {
+          setOpen(false)
+          onDetailExpand?.(false)
+        }}
         className='absolute bottom-2 left-2 top-2 flex w-[420px] flex-col rounded-2xl !p-0'
       >
         <div className='flex shrink-0 flex-col items-start justify-center gap-3 self-stretch p-4'>
@@ -239,7 +256,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
           </div>
           {/* description */}
           {appDetail.description && (
-            <div className='system-xs-regular text-text-tertiary'>{appDetail.description}</div>
+            <div className='system-xs-regular overflow-wrap-anywhere max-h-[105px] w-full max-w-full overflow-y-auto whitespace-normal break-words text-text-tertiary'>{appDetail.description}</div>
           )}
           {/* operations */}
           <div className='flex flex-wrap items-center gap-1 self-stretch'>
@@ -249,6 +266,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
               className='gap-[1px]'
               onClick={() => {
                 setOpen(false)
+                onDetailExpand?.(false)
                 setShowEditModal(true)
               }}
             >
@@ -261,9 +279,9 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
               className='gap-[1px]'
               onClick={() => {
                 setOpen(false)
+                onDetailExpand?.(false)
                 setShowDuplicateModal(true)
-              }}
-            >
+              }}>
               <RiFileCopy2Line className='h-3.5 w-3.5 text-components-button-secondary-text' />
               <span className='system-xs-medium text-components-button-secondary-text'>{t('app.duplicate')}</span>
             </Button>
@@ -276,22 +294,52 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
               <RiFileDownloadLine className='h-3.5 w-3.5 text-components-button-secondary-text' />
               <span className='system-xs-medium text-components-button-secondary-text'>{t('app.export')}</span>
             </Button>
-            {
-              (appDetail.mode === 'advanced-chat' || appDetail.mode === 'workflow') && (
+            {appDetail.mode !== 'agent-chat' && <PortalToFollowElem
+              open={showMore}
+              onOpenChange={setShowMore}
+              placement='bottom-end'
+              offset={{
+                mainAxis: 4,
+              }}>
+              <PortalToFollowElemTrigger onClick={handleTriggerMore}>
                 <Button
                   size={'small'}
                   variant={'secondary'}
                   className='gap-[1px]'
-                  onClick={() => {
-                    setOpen(false)
-                    setShowImportDSLModal(true)
-                  }}
                 >
-                  <RiFileUploadLine className='h-3.5 w-3.5 text-components-button-secondary-text' />
-                  <span className='system-xs-medium text-components-button-secondary-text'>{t('workflow.common.importDSL')}</span>
+                  <RiMoreLine className='h-3.5 w-3.5 text-components-button-secondary-text' />
+                  <span className='system-xs-medium text-components-button-secondary-text'>{t('common.operation.more')}</span>
                 </Button>
-              )
-            }
+              </PortalToFollowElemTrigger>
+              <PortalToFollowElemContent className='z-[21]'>
+                <div className='flex w-[264px] flex-col rounded-[12px] border-[0.5px] border-components-panel-border bg-components-panel-bg-blur p-1 shadow-lg backdrop-blur-[5px]'>
+                  {
+                    (appDetail.mode === 'advanced-chat' || appDetail.mode === 'workflow')
+                    && <div className='flex h-8 cursor-pointer items-center gap-x-1 rounded-lg p-1.5 hover:bg-state-base-hover'
+                      onClick={() => {
+                        setOpen(false)
+                        onDetailExpand?.(false)
+                        setShowImportDSLModal(true)
+                      }}>
+                      <RiFileUploadLine className='h-4 w-4 text-text-tertiary' />
+                      <span className='system-md-regular text-text-secondary'>{t('workflow.common.importDSL')}</span>
+                    </div>
+                  }
+                  {
+                    (appDetail.mode === 'completion' || appDetail.mode === 'chat')
+                    && <div className='flex h-8 cursor-pointer items-center gap-x-1 rounded-lg p-1.5 hover:bg-state-base-hover'
+                      onClick={() => {
+                        setOpen(false)
+                        onDetailExpand?.(false)
+                        setShowSwitchModal(true)
+                      }}>
+                      <RiExchange2Line className='h-4 w-4 text-text-tertiary' />
+                      <span className='system-md-regular text-text-secondary'>{t('app.switch')}</span>
+                    </div>
+                  }
+                </div>
+              </PortalToFollowElemContent>
+            </PortalToFollowElem>}
           </div>
         </div>
         <div className='flex flex-1'>
@@ -301,6 +349,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
             className='flex grow flex-col gap-2 overflow-auto px-2 py-1'
           />
         </div>
+        <Divider />
         <div className='flex min-h-fit shrink-0 flex-col items-start justify-center gap-3 self-stretch border-t-[0.5px] border-divider-subtle p-2'>
           <Button
             size={'medium'}
@@ -308,6 +357,7 @@ const AppInfo = ({ expand }: IAppInfoProps) => {
             className='gap-0.5'
             onClick={() => {
               setOpen(false)
+              onDetailExpand?.(false)
               setShowConfirmDelete(true)
             }}
           >
