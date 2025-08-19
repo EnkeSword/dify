@@ -56,6 +56,7 @@ from .app import (
     conversation,
     conversation_variables,
     generator,
+    mcp_server,
     message,
     model_config,
     ops_trace,
@@ -83,6 +84,7 @@ from .datasets import (
     external,
     hit_testing,
     metadata,
+    upload_file,
     website,
 )
 

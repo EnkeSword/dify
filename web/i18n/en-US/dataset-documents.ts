@@ -30,6 +30,9 @@ const translation = {
       delete: 'Delete',
       enableWarning: 'Archived file cannot be enabled',
       sync: 'Sync',
+      pause: 'Pause',
+      resume: 'Resume',
+      download: 'Download File',
     },
     index: {
       enable: 'Enable',
@@ -388,6 +391,7 @@ const translation = {
     regenerationSuccessMessage: 'You can close this window.',
     edited: 'EDITED',
     editedAt: 'Edited at',
+    dateTimeFormat: 'MM/DD/YYYY h:mm',
     expandChunks: 'Expand chunks',
     collapseChunks: 'Collapse chunks',
   },
