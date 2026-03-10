@@ -2,17 +2,16 @@ import time
 import uuid
 from uuid import uuid4
 
-from core.app.entities.app_invoke_entities import InvokeFrom
-from core.variables import ArrayStringVariable
-from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.graph_engine.entities.graph import Graph
-from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
-from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
-from core.workflow.nodes.variable_assigner.v2 import VariableAssignerNode
-from core.workflow.nodes.variable_assigner.v2.enums import InputType, Operation
-from core.workflow.system_variable import SystemVariable
-from models.enums import UserFrom
-from models.workflow import WorkflowType
+from core.app.entities.app_invoke_entities import InvokeFrom, UserFrom
+from core.workflow.node_factory import DifyNodeFactory
+from dify_graph.entities import GraphInitParams
+from dify_graph.entities.graph_init_params import DIFY_RUN_CONTEXT_KEY
+from dify_graph.graph import Graph
+from dify_graph.nodes.variable_assigner.v2 import VariableAssignerNode
+from dify_graph.nodes.variable_assigner.v2.enums import InputType, Operation
+from dify_graph.runtime import GraphRuntimeState, VariablePool
+from dify_graph.system_variable import SystemVariable
+from dify_graph.variables import ArrayStringVariable
 
 DEFAULT_NODE_ID = "node_id"
 
@@ -77,27 +76,26 @@ def test_remove_first_from_array():
             },
         ],
         "nodes": [
-            {"data": {"type": "start"}, "id": "start"},
+            {"data": {"type": "start", "title": "Start"}, "id": "start"},
             {
-                "data": {
-                    "type": "assigner",
-                },
+                "data": {"type": "assigner", "version": "2", "title": "Variable Assigner", "items": []},
                 "id": "assigner",
             },
         ],
     }
 
-    graph = Graph.init(graph_config=graph_config)
-
     init_params = GraphInitParams(
-        tenant_id="1",
-        app_id="1",
-        workflow_type=WorkflowType.WORKFLOW,
         workflow_id="1",
         graph_config=graph_config,
-        user_id="1",
-        user_from=UserFrom.ACCOUNT,
-        invoke_from=InvokeFrom.DEBUGGER,
+        run_context={
+            DIFY_RUN_CONTEXT_KEY: {
+                "tenant_id": "1",
+                "app_id": "1",
+                "user_id": "1",
+                "user_from": UserFrom.ACCOUNT,
+                "invoke_from": InvokeFrom.DEBUGGER,
+            }
+        },
         call_depth=0,
     )
 
@@ -114,6 +112,13 @@ def test_remove_first_from_array():
         environment_variables=[],
         conversation_variables=[conversation_variable],
     )
+
+    graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter())
+    node_factory = DifyNodeFactory(
+        graph_init_params=init_params,
+        graph_runtime_state=graph_runtime_state,
+    )
+    graph = Graph.init(graph_config=graph_config, node_factory=node_factory)
 
     node_config = {
         "id": "node_id",
@@ -134,24 +139,14 @@ def test_remove_first_from_array():
     node = VariableAssignerNode(
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
-        graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter()),
+        graph_runtime_state=graph_runtime_state,
         config=node_config,
     )
-
-    # Initialize node data
-    node.init_node_data(node_config["data"])
-
-    # Skip the mock assertion since we're in a test environment
-    # Print the variable before running
-    print(f"Before: {variable_pool.get(['conversation', conversation_variable.name]).to_object()}")
 
     # Run the node
     result = list(node.run())
 
-    # Print the variable after running and the result
-    print(f"After: {variable_pool.get(['conversation', conversation_variable.name]).to_object()}")
-    print(f"Result: {result}")
+    # Completed run
 
     got = variable_pool.get(["conversation", conversation_variable.name])
     assert got is not None
@@ -169,27 +164,26 @@ def test_remove_last_from_array():
             },
         ],
         "nodes": [
-            {"data": {"type": "start"}, "id": "start"},
+            {"data": {"type": "start", "title": "Start"}, "id": "start"},
             {
-                "data": {
-                    "type": "assigner",
-                },
+                "data": {"type": "assigner", "version": "2", "title": "Variable Assigner", "items": []},
                 "id": "assigner",
             },
         ],
     }
 
-    graph = Graph.init(graph_config=graph_config)
-
     init_params = GraphInitParams(
-        tenant_id="1",
-        app_id="1",
-        workflow_type=WorkflowType.WORKFLOW,
         workflow_id="1",
         graph_config=graph_config,
-        user_id="1",
-        user_from=UserFrom.ACCOUNT,
-        invoke_from=InvokeFrom.DEBUGGER,
+        run_context={
+            DIFY_RUN_CONTEXT_KEY: {
+                "tenant_id": "1",
+                "app_id": "1",
+                "user_id": "1",
+                "user_from": UserFrom.ACCOUNT,
+                "invoke_from": InvokeFrom.DEBUGGER,
+            }
+        },
         call_depth=0,
     )
 
@@ -206,6 +200,13 @@ def test_remove_last_from_array():
         environment_variables=[],
         conversation_variables=[conversation_variable],
     )
+
+    graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter())
+    node_factory = DifyNodeFactory(
+        graph_init_params=init_params,
+        graph_runtime_state=graph_runtime_state,
+    )
+    graph = Graph.init(graph_config=graph_config, node_factory=node_factory)
 
     node_config = {
         "id": "node_id",
@@ -226,15 +227,10 @@ def test_remove_last_from_array():
     node = VariableAssignerNode(
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
-        graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter()),
+        graph_runtime_state=graph_runtime_state,
         config=node_config,
     )
 
-    # Initialize node data
-    node.init_node_data(node_config["data"])
-
-    # Skip the mock assertion since we're in a test environment
     list(node.run())
 
     got = variable_pool.get(["conversation", conversation_variable.name])
@@ -253,27 +249,26 @@ def test_remove_first_from_empty_array():
             },
         ],
         "nodes": [
-            {"data": {"type": "start"}, "id": "start"},
+            {"data": {"type": "start", "title": "Start"}, "id": "start"},
             {
-                "data": {
-                    "type": "assigner",
-                },
+                "data": {"type": "assigner", "version": "2", "title": "Variable Assigner", "items": []},
                 "id": "assigner",
             },
         ],
     }
 
-    graph = Graph.init(graph_config=graph_config)
-
     init_params = GraphInitParams(
-        tenant_id="1",
-        app_id="1",
-        workflow_type=WorkflowType.WORKFLOW,
         workflow_id="1",
         graph_config=graph_config,
-        user_id="1",
-        user_from=UserFrom.ACCOUNT,
-        invoke_from=InvokeFrom.DEBUGGER,
+        run_context={
+            DIFY_RUN_CONTEXT_KEY: {
+                "tenant_id": "1",
+                "app_id": "1",
+                "user_id": "1",
+                "user_from": UserFrom.ACCOUNT,
+                "invoke_from": InvokeFrom.DEBUGGER,
+            }
+        },
         call_depth=0,
     )
 
@@ -290,6 +285,13 @@ def test_remove_first_from_empty_array():
         environment_variables=[],
         conversation_variables=[conversation_variable],
     )
+
+    graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter())
+    node_factory = DifyNodeFactory(
+        graph_init_params=init_params,
+        graph_runtime_state=graph_runtime_state,
+    )
+    graph = Graph.init(graph_config=graph_config, node_factory=node_factory)
 
     node_config = {
         "id": "node_id",
@@ -310,15 +312,10 @@ def test_remove_first_from_empty_array():
     node = VariableAssignerNode(
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
-        graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter()),
+        graph_runtime_state=graph_runtime_state,
         config=node_config,
     )
 
-    # Initialize node data
-    node.init_node_data(node_config["data"])
-
-    # Skip the mock assertion since we're in a test environment
     list(node.run())
 
     got = variable_pool.get(["conversation", conversation_variable.name])
@@ -337,27 +334,26 @@ def test_remove_last_from_empty_array():
             },
         ],
         "nodes": [
-            {"data": {"type": "start"}, "id": "start"},
+            {"data": {"type": "start", "title": "Start"}, "id": "start"},
             {
-                "data": {
-                    "type": "assigner",
-                },
+                "data": {"type": "assigner", "version": "2", "title": "Variable Assigner", "items": []},
                 "id": "assigner",
             },
         ],
     }
 
-    graph = Graph.init(graph_config=graph_config)
-
     init_params = GraphInitParams(
-        tenant_id="1",
-        app_id="1",
-        workflow_type=WorkflowType.WORKFLOW,
         workflow_id="1",
         graph_config=graph_config,
-        user_id="1",
-        user_from=UserFrom.ACCOUNT,
-        invoke_from=InvokeFrom.DEBUGGER,
+        run_context={
+            DIFY_RUN_CONTEXT_KEY: {
+                "tenant_id": "1",
+                "app_id": "1",
+                "user_id": "1",
+                "user_from": UserFrom.ACCOUNT,
+                "invoke_from": InvokeFrom.DEBUGGER,
+            }
+        },
         call_depth=0,
     )
 
@@ -374,6 +370,13 @@ def test_remove_last_from_empty_array():
         environment_variables=[],
         conversation_variables=[conversation_variable],
     )
+
+    graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter())
+    node_factory = DifyNodeFactory(
+        graph_init_params=init_params,
+        graph_runtime_state=graph_runtime_state,
+    )
+    graph = Graph.init(graph_config=graph_config, node_factory=node_factory)
 
     node_config = {
         "id": "node_id",
@@ -394,17 +397,55 @@ def test_remove_last_from_empty_array():
     node = VariableAssignerNode(
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
-        graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter()),
+        graph_runtime_state=graph_runtime_state,
         config=node_config,
     )
 
-    # Initialize node data
-    node.init_node_data(node_config["data"])
-
-    # Skip the mock assertion since we're in a test environment
     list(node.run())
 
     got = variable_pool.get(["conversation", conversation_variable.name])
     assert got is not None
     assert got.to_object() == []
+
+
+def test_node_factory_creates_variable_assigner_node():
+    graph_config = {
+        "edges": [],
+        "nodes": [
+            {
+                "data": {"type": "assigner", "version": "2", "title": "Variable Assigner", "items": []},
+                "id": "assigner",
+            },
+        ],
+    }
+
+    init_params = GraphInitParams(
+        workflow_id="1",
+        graph_config=graph_config,
+        run_context={
+            DIFY_RUN_CONTEXT_KEY: {
+                "tenant_id": "1",
+                "app_id": "1",
+                "user_id": "1",
+                "user_from": UserFrom.ACCOUNT,
+                "invoke_from": InvokeFrom.DEBUGGER,
+            }
+        },
+        call_depth=0,
+    )
+    variable_pool = VariablePool(
+        system_variables=SystemVariable(conversation_id="conversation_id"),
+        user_inputs={},
+        environment_variables=[],
+        conversation_variables=[],
+    )
+    graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter())
+
+    node_factory = DifyNodeFactory(
+        graph_init_params=init_params,
+        graph_runtime_state=graph_runtime_state,
+    )
+
+    node = node_factory.create_node(graph_config["nodes"][0])
+
+    assert isinstance(node, VariableAssignerNode)

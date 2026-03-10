@@ -8,13 +8,12 @@ improving performance by offloading storage operations to background workers.
 import json
 import logging
 
-from celery import shared_task  # type: ignore[import-untyped]
+from celery import shared_task
 from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker
 
-from core.workflow.entities.workflow_execution import WorkflowExecution
-from core.workflow.workflow_type_encoder import WorkflowRuntimeTypeConverter
-from extensions.ext_database import db
+from core.db.session_factory import session_factory
+from dify_graph.entities.workflow_execution import WorkflowExecution
+from dify_graph.workflow_type_encoder import WorkflowRuntimeTypeConverter
 from models import CreatorUserRole, WorkflowRun
 from models.enums import WorkflowRunTriggeredFrom
 
@@ -46,10 +45,7 @@ def save_workflow_execution_task(
         True if successful, False otherwise
     """
     try:
-        # Create a new session for this task
-        session_factory = sessionmaker(bind=db.engine, expire_on_commit=False)
-
-        with session_factory() as session:
+        with session_factory.create_session() as session:
             # Deserialize execution data
             execution = WorkflowExecution.model_validate(execution_data)
 
@@ -120,7 +116,7 @@ def _create_workflow_run_from_execution(
     return workflow_run
 
 
-def _update_workflow_run_from_execution(workflow_run: WorkflowRun, execution: WorkflowExecution) -> None:
+def _update_workflow_run_from_execution(workflow_run: WorkflowRun, execution: WorkflowExecution):
     """
     Update a WorkflowRun database model from a WorkflowExecution domain entity.
     """

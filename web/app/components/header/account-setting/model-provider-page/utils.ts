@@ -1,15 +1,8 @@
-import { ValidatedStatus } from '../key-validator/declarations'
 import type {
-  CredentialFormSchemaRadio,
+  CredentialFormSchemaSelect,
   CredentialFormSchemaTextInput,
   FormValue,
   ModelLoadBalancingConfig,
-} from './declarations'
-import {
-  ConfigurationMethodEnum,
-  FormTypeEnum,
-  MODEL_TYPE_TEXT,
-  ModelTypeEnum,
 } from './declarations'
 import {
   deleteModelProvider,
@@ -17,10 +10,29 @@ import {
   validateModelLoadBalancingCredentials,
   validateModelProvider,
 } from '@/service/common'
+import { ModelProviderQuotaGetPaid } from '@/types/model-provider'
+import { ValidatedStatus } from '../key-validator/declarations'
+import {
+  ConfigurationMethodEnum,
+  FormTypeEnum,
+  MODEL_TYPE_TEXT,
+  ModelTypeEnum,
+} from './declarations'
 
-export const MODEL_PROVIDER_QUOTA_GET_PAID = ['langgenius/anthropic/anthropic', 'langgenius/openai/openai', 'langgenius/azure_openai/azure_openai']
+export { ModelProviderQuotaGetPaid } from '@/types/model-provider'
 
-export const isNullOrUndefined = (value: any) => {
+export const MODEL_PROVIDER_QUOTA_GET_PAID = [ModelProviderQuotaGetPaid.OPENAI, ModelProviderQuotaGetPaid.ANTHROPIC, ModelProviderQuotaGetPaid.GEMINI, ModelProviderQuotaGetPaid.X, ModelProviderQuotaGetPaid.DEEPSEEK, ModelProviderQuotaGetPaid.TONGYI]
+
+export const modelNameMap = {
+  [ModelProviderQuotaGetPaid.OPENAI]: 'OpenAI',
+  [ModelProviderQuotaGetPaid.ANTHROPIC]: 'Anthropic',
+  [ModelProviderQuotaGetPaid.GEMINI]: 'Gemini',
+  [ModelProviderQuotaGetPaid.X]: 'xAI',
+  [ModelProviderQuotaGetPaid.DEEPSEEK]: 'DeepSeek',
+  [ModelProviderQuotaGetPaid.TONGYI]: 'Tongyi',
+}
+
+export const isNullOrUndefined = (value: unknown): value is null | undefined => {
   return value === undefined || value === null
 }
 
@@ -49,8 +61,9 @@ export const validateCredentials = async (predefined: boolean, provider: string,
     else
       return Promise.resolve({ status: ValidatedStatus.Error, message: res.error || 'error' })
   }
-  catch (e: any) {
-    return Promise.resolve({ status: ValidatedStatus.Error, message: e.message })
+  catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return Promise.resolve({ status: ValidatedStatus.Error, message })
   }
 }
 
@@ -73,8 +86,9 @@ export const validateLoadBalancingCredentials = async (predefined: boolean, prov
     else
       return Promise.resolve({ status: ValidatedStatus.Error, message: res.error || 'error' })
   }
-  catch (e: any) {
-    return Promise.resolve({ status: ValidatedStatus.Error, message: e.message })
+  catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return Promise.resolve({ status: ValidatedStatus.Error, message })
   }
 }
 
@@ -82,12 +96,14 @@ export const saveCredentials = async (predefined: boolean, provider: string, v: 
   let body, url
 
   if (predefined) {
+    const { __authorization_name__, ...rest } = v
     body = {
       config_from: ConfigurationMethodEnum.predefinedModel,
-      credentials: v,
+      credentials: rest,
       load_balancing: loadBalancing,
+      name: __authorization_name__,
     }
-    url = `/workspaces/current/model-providers/${provider}`
+    url = `/workspaces/current/model-providers/${provider}/credentials`
   }
   else {
     const { __model_name, __model_type, ...credentials } = v
@@ -117,22 +133,28 @@ export const savePredefinedLoadBalancingConfig = async (provider: string, v: For
   return setModelProvider({ url, body })
 }
 
-export const removeCredentials = async (predefined: boolean, provider: string, v: FormValue) => {
+export const removeCredentials = async (predefined: boolean, provider: string, v: FormValue, credentialId?: string) => {
   let url = ''
   let body
 
   if (predefined) {
-    url = `/workspaces/current/model-providers/${provider}`
+    url = `/workspaces/current/model-providers/${provider}/credentials`
+    if (credentialId) {
+      body = {
+        credential_id: credentialId,
+      }
+    }
   }
   else {
-    if (v) {
-      const { __model_name, __model_type } = v
-      body = {
-        model: __model_name,
-        model_type: __model_type,
-      }
-      url = `/workspaces/current/model-providers/${provider}/models`
+    if (!v)
+      return
+
+    const { __model_name, __model_type } = v
+    body = {
+      model: __model_name,
+      model_type: __model_type,
     }
+    url = `/workspaces/current/model-providers/${provider}/models`
   }
 
   return deleteModelProvider({ url, body })
@@ -153,9 +175,9 @@ export const modelTypeFormat = (modelType: ModelTypeEnum) => {
   return modelType.toLocaleUpperCase()
 }
 
-export const genModelTypeFormSchema = (modelTypes: ModelTypeEnum[]) => {
+export const genModelTypeFormSchema = (modelTypes: ModelTypeEnum[]): Omit<CredentialFormSchemaSelect, 'name'> => {
   return {
-    type: FormTypeEnum.radio,
+    type: FormTypeEnum.select,
     label: {
       zh_Hans: '模型类型',
       en_US: 'Model Type',
@@ -174,10 +196,10 @@ export const genModelTypeFormSchema = (modelTypes: ModelTypeEnum[]) => {
         show_on: [],
       }
     }),
-  } as CredentialFormSchemaRadio
+  }
 }
 
-export const genModelNameFormSchema = (model?: Pick<CredentialFormSchemaTextInput, 'label' | 'placeholder'>) => {
+export const genModelNameFormSchema = (model?: Pick<CredentialFormSchemaTextInput, 'label' | 'placeholder'>): Omit<CredentialFormSchemaTextInput, 'name'> => {
   return {
     type: FormTypeEnum.textInput,
     label: model?.label || {
@@ -191,5 +213,5 @@ export const genModelNameFormSchema = (model?: Pick<CredentialFormSchemaTextInpu
       zh_Hans: '请输入模型名称',
       en_US: 'Please enter model name',
     },
-  } as CredentialFormSchemaTextInput
+  }
 }

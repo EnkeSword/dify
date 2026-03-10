@@ -1,23 +1,16 @@
-import React from 'react'
 import { render } from '@testing-library/react'
-import '@testing-library/jest-dom'
+import * as React from 'react'
 import { OpikIconBig } from '@/app/components/base/icons/src/public/tracing'
-
-// Mock dependencies to isolate the SVG rendering issue
-jest.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-  }),
-}))
+import iconData from '@/app/components/base/icons/src/public/tracing/OpikIconBig.json'
+import { normalizeAttrs } from '@/app/components/base/icons/utils'
 
 describe('SVG Attribute Error Reproduction', () => {
   // Capture console errors
   const originalError = console.error
   let errorMessages: string[] = []
-
   beforeEach(() => {
     errorMessages = []
-    console.error = jest.fn((message) => {
+    console.error = vi.fn((message) => {
       errorMessages.push(message)
       originalError(message)
     })
@@ -47,7 +40,7 @@ describe('SVG Attribute Error Reproduction', () => {
           console.log(`  ${index + 1}. ${error.substring(0, 100)}...`)
         })
       }
- else {
+      else {
         console.log('No inkscape errors found in this render')
       }
 
@@ -60,9 +53,6 @@ describe('SVG Attribute Error Reproduction', () => {
 
   it('should analyze the SVG structure causing the errors', () => {
     console.log('\n=== ANALYZING SVG STRUCTURE ===')
-
-    // Import the JSON data directly
-    const iconData = require('@/app/components/base/icons/src/public/tracing/OpikIconBig.json')
 
     console.log('Icon structure analysis:')
     console.log('- Root element:', iconData.icon.name)
@@ -120,8 +110,6 @@ describe('SVG Attribute Error Reproduction', () => {
   it('should test the normalizeAttrs function behavior', () => {
     console.log('\n=== TESTING normalizeAttrs FUNCTION ===')
 
-    const { normalizeAttrs } = require('@/app/components/base/icons/utils')
-
     const testAttributes = {
       'inkscape:showpageshadow': '2',
       'inkscape:pageopacity': '0.0',
@@ -150,7 +138,7 @@ describe('SVG Attribute Error Reproduction', () => {
 
     if (problematicKeys.length > 0)
       console.log(`🚨 PROBLEM: Still found problematic attributes: ${problematicKeys.join(', ')}`)
-     else
+    else
       console.log('✅ No problematic attributes found after normalization')
   })
 })

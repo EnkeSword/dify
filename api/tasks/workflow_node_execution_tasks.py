@@ -8,15 +8,14 @@ improving performance by offloading storage operations to background workers.
 import json
 import logging
 
-from celery import shared_task  # type: ignore[import-untyped]
+from celery import shared_task
 from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker
 
-from core.workflow.entities.workflow_node_execution import (
+from core.db.session_factory import session_factory
+from dify_graph.entities.workflow_node_execution import (
     WorkflowNodeExecution,
 )
-from core.workflow.workflow_type_encoder import WorkflowRuntimeTypeConverter
-from extensions.ext_database import db
+from dify_graph.workflow_type_encoder import WorkflowRuntimeTypeConverter
 from models import CreatorUserRole, WorkflowNodeExecutionModel
 from models.workflow import WorkflowNodeExecutionTriggeredFrom
 
@@ -48,10 +47,7 @@ def save_workflow_node_execution_task(
         True if successful, False otherwise
     """
     try:
-        # Create a new session for this task
-        session_factory = sessionmaker(bind=db.engine, expire_on_commit=False)
-
-        with session_factory() as session:
+        with session_factory.create_session() as session:
             # Deserialize execution data
             execution = WorkflowNodeExecution.model_validate(execution_data)
 
@@ -140,9 +136,7 @@ def _create_node_execution_from_domain(
     return node_execution
 
 
-def _update_node_execution_from_domain(
-    node_execution: WorkflowNodeExecutionModel, execution: WorkflowNodeExecution
-) -> None:
+def _update_node_execution_from_domain(node_execution: WorkflowNodeExecutionModel, execution: WorkflowNodeExecution):
     """
     Update a WorkflowNodeExecutionModel database model from a WorkflowNodeExecution domain entity.
     """

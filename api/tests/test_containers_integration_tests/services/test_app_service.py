@@ -1,12 +1,17 @@
-from unittest.mock import patch
+from unittest.mock import create_autospec, patch
 
 import pytest
 from faker import Faker
+from sqlalchemy.orm import Session
 
 from constants.model_template import default_app_templates
+from models import Account
 from models.model import App, Site
 from services.account_service import AccountService, TenantService
-from services.app_service import AppService
+from tests.test_containers_integration_tests.helpers import generate_valid_password
+
+# Delay import of AppService to avoid circular dependency
+# from services.app_service import AppService
 
 
 class TestAppService:
@@ -41,7 +46,7 @@ class TestAppService:
                 "account_feature_service": mock_account_feature_service,
             }
 
-    def test_create_app_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_create_app_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app creation with basic parameters.
         """
@@ -52,7 +57,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -70,6 +75,9 @@ class TestAppService:
         }
 
         # Create app
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -92,7 +100,9 @@ class TestAppService:
         assert app.is_public is False
         assert app.is_universal is False
 
-    def test_create_app_with_different_modes(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_create_app_with_different_modes(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
         """
         Test app creation with different app modes.
         """
@@ -103,10 +113,13 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
 
@@ -132,7 +145,7 @@ class TestAppService:
             assert app.tenant_id == tenant.id
             assert app.created_by == account.id
 
-    def test_get_app_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_get_app_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app retrieval.
         """
@@ -143,7 +156,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -158,11 +171,19 @@ class TestAppService:
             "icon_background": "#45B7D1",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         created_app = app_service.create_app(tenant.id, app_args, account)
 
-        # Get app using the service
-        retrieved_app = app_service.get_app(created_app)
+        # Get app using the service - needs current_user mock
+        mock_current_user = create_autospec(Account, instance=True)
+        mock_current_user.id = account.id
+        mock_current_user.current_tenant_id = account.current_tenant_id
+
+        with patch("services.app_service.current_user", mock_current_user):
+            retrieved_app = app_service.get_app(created_app)
 
         # Verify retrieved app matches created app
         assert retrieved_app.id == created_app.id
@@ -172,7 +193,7 @@ class TestAppService:
         assert retrieved_app.tenant_id == created_app.tenant_id
         assert retrieved_app.created_by == created_app.created_by
 
-    def test_get_paginate_apps_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_get_paginate_apps_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful paginated app list retrieval.
         """
@@ -183,10 +204,13 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
 
@@ -223,7 +247,9 @@ class TestAppService:
             assert app.tenant_id == tenant.id
             assert app.mode == "chat"
 
-    def test_get_paginate_apps_with_filters(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_get_paginate_apps_with_filters(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
         """
         Test paginated app list with various filters.
         """
@@ -234,10 +260,13 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
 
@@ -293,7 +322,9 @@ class TestAppService:
         my_apps = app_service.get_paginate_apps(account.id, tenant.id, created_by_me_args)
         assert len(my_apps.items) == 1
 
-    def test_get_paginate_apps_with_tag_filters(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_get_paginate_apps_with_tag_filters(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
         """
         Test paginated app list with tag filters.
         """
@@ -304,10 +335,13 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
 
@@ -360,7 +394,7 @@ class TestAppService:
             # Should return None when no apps match tag filter
             assert paginated_apps is None
 
-    def test_update_app_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_update_app_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app update with all fields.
         """
@@ -371,7 +405,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -385,6 +419,9 @@ class TestAppService:
             "icon": "🎯",
             "icon_background": "#45B7D1",
         }
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
@@ -406,7 +443,11 @@ class TestAppService:
             "use_icon_as_answer_icon": True,
         }
 
-        with patch("flask_login.utils._get_user", return_value=account):
+        mock_current_user = create_autospec(Account, instance=True)
+        mock_current_user.id = account.id
+        mock_current_user.current_tenant_id = account.current_tenant_id
+
+        with patch("services.app_service.current_user", mock_current_user):
             updated_app = app_service.update_app(app, update_args)
 
         # Verify updated fields
@@ -422,7 +463,7 @@ class TestAppService:
         assert updated_app.tenant_id == app.tenant_id
         assert updated_app.created_by == app.created_by
 
-    def test_update_app_name_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_update_app_name_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app name update.
         """
@@ -433,7 +474,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -448,6 +489,9 @@ class TestAppService:
             "icon_background": "#45B7D1",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -456,7 +500,11 @@ class TestAppService:
 
         # Update app name
         new_name = "New App Name"
-        with patch("flask_login.utils._get_user", return_value=account):
+        mock_current_user = create_autospec(Account, instance=True)
+        mock_current_user.id = account.id
+        mock_current_user.current_tenant_id = account.current_tenant_id
+
+        with patch("services.app_service.current_user", mock_current_user):
             updated_app = app_service.update_app_name(app, new_name)
 
         assert updated_app.name == new_name
@@ -468,7 +516,7 @@ class TestAppService:
         assert updated_app.tenant_id == app.tenant_id
         assert updated_app.created_by == app.created_by
 
-    def test_update_app_icon_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_update_app_icon_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app icon update.
         """
@@ -479,7 +527,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -494,6 +542,9 @@ class TestAppService:
             "icon_background": "#45B7D1",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -504,7 +555,11 @@ class TestAppService:
         # Update app icon
         new_icon = "🌟"
         new_icon_background = "#FFD93D"
-        with patch("flask_login.utils._get_user", return_value=account):
+        mock_current_user = create_autospec(Account, instance=True)
+        mock_current_user.id = account.id
+        mock_current_user.current_tenant_id = account.current_tenant_id
+
+        with patch("services.app_service.current_user", mock_current_user):
             updated_app = app_service.update_app_icon(app, new_icon, new_icon_background)
 
         assert updated_app.icon == new_icon
@@ -518,7 +573,9 @@ class TestAppService:
         assert updated_app.tenant_id == app.tenant_id
         assert updated_app.created_by == app.created_by
 
-    def test_update_app_site_status_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_update_app_site_status_success(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
         """
         Test successful app site status update.
         """
@@ -529,7 +586,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -544,6 +601,9 @@ class TestAppService:
             "icon_background": "#74B9FF",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -551,13 +611,17 @@ class TestAppService:
         original_site_status = app.enable_site
 
         # Update site status to disabled
-        with patch("flask_login.utils._get_user", return_value=account):
+        mock_current_user = create_autospec(Account, instance=True)
+        mock_current_user.id = account.id
+        mock_current_user.current_tenant_id = account.current_tenant_id
+
+        with patch("services.app_service.current_user", mock_current_user):
             updated_app = app_service.update_app_site_status(app, False)
         assert updated_app.enable_site is False
         assert updated_app.updated_by == account.id
 
         # Update site status back to enabled
-        with patch("flask_login.utils._get_user", return_value=account):
+        with patch("services.app_service.current_user", mock_current_user):
             updated_app = app_service.update_app_site_status(updated_app, True)
         assert updated_app.enable_site is True
         assert updated_app.updated_by == account.id
@@ -569,7 +633,9 @@ class TestAppService:
         assert updated_app.tenant_id == app.tenant_id
         assert updated_app.created_by == app.created_by
 
-    def test_update_app_api_status_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_update_app_api_status_success(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
         """
         Test successful app API status update.
         """
@@ -580,7 +646,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -595,6 +661,9 @@ class TestAppService:
             "icon_background": "#A29BFE",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -602,13 +671,17 @@ class TestAppService:
         original_api_status = app.enable_api
 
         # Update API status to disabled
-        with patch("flask_login.utils._get_user", return_value=account):
+        mock_current_user = create_autospec(Account, instance=True)
+        mock_current_user.id = account.id
+        mock_current_user.current_tenant_id = account.current_tenant_id
+
+        with patch("services.app_service.current_user", mock_current_user):
             updated_app = app_service.update_app_api_status(app, False)
         assert updated_app.enable_api is False
         assert updated_app.updated_by == account.id
 
         # Update API status back to enabled
-        with patch("flask_login.utils._get_user", return_value=account):
+        with patch("services.app_service.current_user", mock_current_user):
             updated_app = app_service.update_app_api_status(updated_app, True)
         assert updated_app.enable_api is True
         assert updated_app.updated_by == account.id
@@ -620,7 +693,9 @@ class TestAppService:
         assert updated_app.tenant_id == app.tenant_id
         assert updated_app.created_by == app.created_by
 
-    def test_update_app_site_status_no_change(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_update_app_site_status_no_change(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
         """
         Test app site status update when status doesn't change.
         """
@@ -631,7 +706,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -645,6 +720,9 @@ class TestAppService:
             "icon": "🔄",
             "icon_background": "#FD79A8",
         }
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
@@ -668,7 +746,7 @@ class TestAppService:
         assert updated_app.tenant_id == app.tenant_id
         assert updated_app.created_by == app.created_by
 
-    def test_delete_app_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_delete_app_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app deletion.
         """
@@ -679,7 +757,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -693,6 +771,9 @@ class TestAppService:
             "icon": "🗑️",
             "icon_background": "#E17055",
         }
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
@@ -711,12 +792,13 @@ class TestAppService:
             mock_delete_task.delay.assert_called_once_with(tenant_id=tenant.id, app_id=app_id)
 
         # Verify app was deleted from database
-        from extensions.ext_database import db
 
-        deleted_app = db.session.query(App).filter_by(id=app_id).first()
+        deleted_app = db_session_with_containers.query(App).filter_by(id=app_id).first()
         assert deleted_app is None
 
-    def test_delete_app_with_related_data(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_delete_app_with_related_data(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
         """
         Test app deletion with related data cleanup.
         """
@@ -727,7 +809,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -741,6 +823,9 @@ class TestAppService:
             "icon": "🧹",
             "icon_background": "#00B894",
         }
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
 
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
@@ -769,12 +854,11 @@ class TestAppService:
             mock_delete_task.delay.assert_called_once_with(tenant_id=tenant.id, app_id=app_id)
 
         # Verify app was deleted from database
-        from extensions.ext_database import db
 
-        deleted_app = db.session.query(App).filter_by(id=app_id).first()
+        deleted_app = db_session_with_containers.query(App).filter_by(id=app_id).first()
         assert deleted_app is None
 
-    def test_get_app_meta_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_get_app_meta_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app metadata retrieval.
         """
@@ -785,7 +869,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -800,6 +884,9 @@ class TestAppService:
             "icon_background": "#6C5CE7",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -810,7 +897,7 @@ class TestAppService:
         assert "tool_icons" in app_meta
         # Note: get_app_meta currently only returns tool_icons
 
-    def test_get_app_code_by_id_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_get_app_code_by_id_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app code retrieval by app ID.
         """
@@ -821,7 +908,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -836,6 +923,9 @@ class TestAppService:
             "icon_background": "#FDCB6E",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -847,7 +937,7 @@ class TestAppService:
         assert app_code is not None
         assert len(app_code) > 0
 
-    def test_get_app_id_by_code_success(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_get_app_id_by_code_success(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test successful app ID retrieval by app code.
         """
@@ -858,7 +948,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -873,6 +963,9 @@ class TestAppService:
             "icon_background": "#E84393",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
         app = app_service.create_app(tenant.id, app_args, account)
 
@@ -884,10 +977,9 @@ class TestAppService:
         site.status = "normal"
         site.default_language = "en-US"
         site.customize_token_strategy = "uuid"
-        from extensions.ext_database import db
 
-        db.session.add(site)
-        db.session.commit()
+        db_session_with_containers.add(site)
+        db_session_with_containers.commit()
 
         # Get app ID by code
         app_id = AppService.get_app_id_by_code(site.code)
@@ -895,7 +987,7 @@ class TestAppService:
         # Verify app ID was retrieved correctly
         assert app_id == app.id
 
-    def test_create_app_invalid_mode(self, db_session_with_containers, mock_external_service_dependencies):
+    def test_create_app_invalid_mode(self, db_session_with_containers: Session, mock_external_service_dependencies):
         """
         Test app creation with invalid mode.
         """
@@ -906,7 +998,7 @@ class TestAppService:
             email=fake.email(),
             name=fake.name(),
             interface_language="en-US",
-            password=fake.password(length=12),
+            password=generate_valid_password(fake),
         )
         TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
         tenant = account.current_tenant
@@ -921,8 +1013,132 @@ class TestAppService:
             "icon_background": "#D63031",
         }
 
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
         app_service = AppService()
 
         # Attempt to create app with invalid mode
         with pytest.raises(ValueError, match="invalid mode value"):
             app_service.create_app(tenant.id, app_args, account)
+
+    def test_get_apps_with_special_characters_in_name(
+        self, db_session_with_containers: Session, mock_external_service_dependencies
+    ):
+        r"""
+        Test app retrieval with special characters in name search to verify SQL injection prevention.
+
+        This test verifies:
+        - Special characters (%, _, \) in name search are properly escaped
+        - Search treats special characters as literal characters, not wildcards
+        - SQL injection via LIKE wildcards is prevented
+        """
+        fake = Faker()
+
+        # Create account and tenant first
+        account = AccountService.create_account(
+            email=fake.email(),
+            name=fake.name(),
+            interface_language="en-US",
+            password=generate_valid_password(fake),
+        )
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        tenant = account.current_tenant
+
+        # Import here to avoid circular dependency
+        from services.app_service import AppService
+
+        app_service = AppService()
+
+        # Create apps with special characters in names
+        app_with_percent = app_service.create_app(
+            tenant.id,
+            {
+                "name": "App with 50% discount",
+                "description": fake.text(max_nb_chars=100),
+                "mode": "chat",
+                "icon_type": "emoji",
+                "icon": "🤖",
+                "icon_background": "#FF6B6B",
+                "api_rph": 100,
+                "api_rpm": 10,
+            },
+            account,
+        )
+
+        app_with_underscore = app_service.create_app(
+            tenant.id,
+            {
+                "name": "test_data_app",
+                "description": fake.text(max_nb_chars=100),
+                "mode": "chat",
+                "icon_type": "emoji",
+                "icon": "🤖",
+                "icon_background": "#FF6B6B",
+                "api_rph": 100,
+                "api_rpm": 10,
+            },
+            account,
+        )
+
+        app_with_backslash = app_service.create_app(
+            tenant.id,
+            {
+                "name": "path\\to\\app",
+                "description": fake.text(max_nb_chars=100),
+                "mode": "chat",
+                "icon_type": "emoji",
+                "icon": "🤖",
+                "icon_background": "#FF6B6B",
+                "api_rph": 100,
+                "api_rpm": 10,
+            },
+            account,
+        )
+
+        # Create app that should NOT match
+        app_no_match = app_service.create_app(
+            tenant.id,
+            {
+                "name": "100% different",
+                "description": fake.text(max_nb_chars=100),
+                "mode": "chat",
+                "icon_type": "emoji",
+                "icon": "🤖",
+                "icon_background": "#FF6B6B",
+                "api_rph": 100,
+                "api_rpm": 10,
+            },
+            account,
+        )
+
+        # Test 1: Search with % character
+        args = {"name": "50%", "mode": "chat", "page": 1, "limit": 10}
+        paginated_apps = app_service.get_paginate_apps(account.id, tenant.id, args)
+        assert paginated_apps is not None
+        assert paginated_apps.total == 1
+        assert len(paginated_apps.items) == 1
+        assert paginated_apps.items[0].name == "App with 50% discount"
+
+        # Test 2: Search with _ character
+        args = {"name": "test_data", "mode": "chat", "page": 1, "limit": 10}
+        paginated_apps = app_service.get_paginate_apps(account.id, tenant.id, args)
+        assert paginated_apps is not None
+        assert paginated_apps.total == 1
+        assert len(paginated_apps.items) == 1
+        assert paginated_apps.items[0].name == "test_data_app"
+
+        # Test 3: Search with \ character
+        args = {"name": "path\\to\\app", "mode": "chat", "page": 1, "limit": 10}
+        paginated_apps = app_service.get_paginate_apps(account.id, tenant.id, args)
+        assert paginated_apps is not None
+        assert paginated_apps.total == 1
+        assert len(paginated_apps.items) == 1
+        assert paginated_apps.items[0].name == "path\\to\\app"
+
+        # Test 4: Search with % should NOT match 100% (verifies escaping works)
+        args = {"name": "50%", "mode": "chat", "page": 1, "limit": 10}
+        paginated_apps = app_service.get_paginate_apps(account.id, tenant.id, args)
+        assert paginated_apps is not None
+        assert paginated_apps.total == 1
+        assert all("50%" in app.name for app in paginated_apps.items)
